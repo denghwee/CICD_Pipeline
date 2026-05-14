@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
@@ -42,7 +41,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
@@ -66,7 +64,7 @@ jobs:
 
       - name: Resolve image name
         id: image
-        shell: pwsh
+        shell: powershell
         run: |
           $repository = "${env:REGISTRY}/${env:GITHUB_REPOSITORY}".ToLowerInvariant()
           "repository=$repository" >> $env:GITHUB_OUTPUT
@@ -130,7 +128,7 @@ jobs:
 
       - name: Resolve image name
         id: image_name
-        shell: pwsh
+        shell: powershell
         run: |
           $repository = "${env:REGISTRY}/${env:GITHUB_REPOSITORY}".ToLowerInvariant()
           "repository=$repository" >> $env:GITHUB_OUTPUT
@@ -146,7 +144,7 @@ jobs:
 
       - name: Export image tag
         id: image
-        shell: pwsh
+        shell: powershell
         run: |
           "image=${{ steps.image_name.outputs.repository }}:${{ github.sha }}" >> $env:GITHUB_OUTPUT
 
@@ -167,7 +165,7 @@ jobs:
           password: ${{ secrets.REGISTRY_TOKEN }}
 
       - name: Run local Blue-Green deployment
-        shell: pwsh
+        shell: powershell
         env:
           IMAGE: ${{ needs.push.outputs.image }}
           VM_APP_DIR: ${{ secrets.VM_APP_DIR }}
