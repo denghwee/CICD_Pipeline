@@ -10,7 +10,7 @@ It also improves security because the final container has a smaller attack surfa
 
 ## 2. Complete CI/CD pipeline flow
 
-When a developer pushes code to the `main` branch, GitHub Actions starts the CI/CD workflow.
+When a developer pushes code to the `master` branch, GitHub Actions starts the CI/CD workflow.
 
 First, the lint job runs `ruff check .` to catch style and static code issues. Then the test job installs dependencies and runs `pytest` with coverage enabled. The coverage result is saved as `coverage.xml`.
 
