@@ -121,11 +121,10 @@ jobs:
           docker run --rm `
             -e SONAR_HOST_URL="$scannerHostUrl" `
             -e SONAR_TOKEN="$env:SONAR_TOKEN" `
+            -e SONAR_SCANNER_OPTS="-Dsonar.projectBaseDir=/usr/src -Dsonar.working.directory=/usr/src/.scannerwork" `
             --mount "type=bind,source=$workspace,target=/usr/src" `
             --workdir /usr/src `
-            sonarsource/sonar-scanner-cli:latest `
-            -Dsonar.projectBaseDir=/usr/src `
-            -Dsonar.working.directory=/usr/src/.scannerwork
+            sonarsource/sonar-scanner-cli:latest
 
       - name: SonarQube quality gate
         shell: powershell
