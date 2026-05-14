@@ -111,20 +111,39 @@ jobs:
             Remove-Item -Recurse -Force $scannerWork
           }
 
-          $scannerHostUrl = $env:SONAR_HOST_URL `
-            -replace "localhost", "host.docker.internal" `
-            -replace "127.0.0.1", "host.docker.internal"
+          $scannerVersion = "7.1.0.4889"
+          $scannerRoot = Join-Path $env:RUNNER_TEMP "sonar-scanner"
+          $scannerHome = Join-Path $scannerRoot "sonar-scanner-$scannerVersion-windows-x64"
+          $scannerZip = Join-Path $scannerRoot "sonar-scanner.zip"
+
+          New-Item -ItemType Directory -Force -Path $scannerRoot | Out-Null
+
+          if (-not (Test-Path (Join-Path $scannerHome "bin\sonar-scanner.bat"))) {
+            $scannerUrl = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$scannerVersion-windows-x64.zip"
+            Write-Host "Downloading SonarScanner CLI $scannerVersion"
+            Invoke-WebRequest -Uri $scannerUrl -OutFile $scannerZip
+
+            if (Test-Path $scannerHome) {
+              Remove-Item -Recurse -Force $scannerHome
+            }
+
+            Expand-Archive -Path $scannerZip -DestinationPath $scannerRoot -Force
+          }
 
           Write-Host "Scanning workspace: $workspace"
-          Write-Host "SonarQube URL from scanner container: $scannerHostUrl"
+          Write-Host "SonarQube URL: $env:SONAR_HOST_URL"
 
-          docker run --rm `
-            -e SONAR_HOST_URL="$scannerHostUrl" `
-            -e SONAR_TOKEN="$env:SONAR_TOKEN" `
-            -e SONAR_SCANNER_OPTS="-Dsonar.projectBaseDir=/usr/src -Dsonar.working.directory=/usr/src/.scannerwork" `
-            --mount "type=bind,source=$workspace,target=/usr/src" `
-            --workdir /usr/src `
-            sonarsource/sonar-scanner-cli:latest
+          Push-Location $workspace
+          try {
+            & (Join-Path $scannerHome "bin\sonar-scanner.bat") `
+              "-Dsonar.host.url=$env:SONAR_HOST_URL" `
+              "-Dsonar.token=$env:SONAR_TOKEN" `
+              "-Dsonar.projectBaseDir=$workspace" `
+              "-Dsonar.working.directory=$scannerWork"
+          }
+          finally {
+            Pop-Location
+          }
 
       - name: SonarQube quality gate
         shell: powershell
