@@ -98,15 +98,27 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
+          $workspace = $env:GITHUB_WORKSPACE
+          $scannerWork = Join-Path $workspace ".scannerwork"
+          if (Test-Path $scannerWork) {
+            Remove-Item -Recurse -Force $scannerWork
+          }
+
           $scannerHostUrl = $env:SONAR_HOST_URL `
             -replace "localhost", "host.docker.internal" `
             -replace "127.0.0.1", "host.docker.internal"
 
+          Write-Host "Scanning workspace: $workspace"
+          Write-Host "SonarQube URL from scanner container: $scannerHostUrl"
+
           docker run --rm `
             -e SONAR_HOST_URL="$scannerHostUrl" `
             -e SONAR_TOKEN="$env:SONAR_TOKEN" `
-            -v "${PWD}:/usr/src" `
-            sonarsource/sonar-scanner-cli:latest
+            --mount "type=bind,source=$workspace,target=/usr/src" `
+            --workdir /usr/src `
+            sonarsource/sonar-scanner-cli:latest `
+            -Dsonar.projectBaseDir=/usr/src `
+            -Dsonar.working.directory=/usr/src/.scannerwork
 
       - name: SonarQube quality gate
         shell: powershell
@@ -114,8 +126,12 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          $reportTaskPath = ".scannerwork/report-task.txt"
+          $reportTaskPath = Join-Path $env:GITHUB_WORKSPACE ".scannerwork\report-task.txt"
           if (-not (Test-Path $reportTaskPath)) {
+            Write-Host "Workspace contents:"
+            Get-ChildItem -Force $env:GITHUB_WORKSPACE | Select-Object Name, Mode, Length | Format-Table
+            Write-Host ".scannerwork contents, if present:"
+            Get-ChildItem -Force (Join-Path $env:GITHUB_WORKSPACE ".scannerwork") -ErrorAction SilentlyContinue | Select-Object Name, Mode, Length | Format-Table
             throw "SonarQube report task file was not created: $reportTaskPath"
           }
 
