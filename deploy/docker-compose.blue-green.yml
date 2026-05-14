@@ -1,0 +1,32 @@
+services:
+  app-blue:
+    image: ${IMAGE}
+    container_name: fastapi-cicd-blue
+    restart: unless-stopped
+    profiles: ["blue"]
+    environment:
+      APP_SLOT: blue
+    ports:
+      - "127.0.0.1:8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  app-green:
+    image: ${IMAGE}
+    container_name: fastapi-cicd-green
+    restart: unless-stopped
+    profiles: ["green"]
+    environment:
+      APP_SLOT: green
+    ports:
+      - "127.0.0.1:8002:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
