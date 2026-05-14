@@ -59,6 +59,43 @@ function Write-NginxConfig {
     Set-Content -Path $NginxGenerated -Value $content -NoNewline
 }
 
+function Test-PortAvailable {
+    param([int]$Port)
+
+    $publishedContainers = docker ps --filter "publish=$Port" --format "{{.Names}}"
+    $unexpectedContainers = $publishedContainers | Where-Object { $_ -and $_ -ne "fastapi-cicd-nginx" }
+    if ($unexpectedContainers) {
+        throw "Port $Port is already published by Docker container(s): $($unexpectedContainers -join ', ')"
+    }
+
+    $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $listeners) {
+        return
+    }
+
+    $allowedOwningProcesses = @()
+    $nginxContainer = $publishedContainers | Where-Object { $_ -eq "fastapi-cicd-nginx" }
+    if ($nginxContainer) {
+        $dockerProcesses = Get-Process -Name "com.docker.backend", "com.docker.proxy", "Docker Desktop" -ErrorAction SilentlyContinue
+        $allowedOwningProcesses = $dockerProcesses.Id
+    }
+
+    $blockedListeners = $listeners | Where-Object { $_.OwningProcess -notin $allowedOwningProcesses }
+    if ($blockedListeners) {
+        $processInfo = $blockedListeners | ForEach-Object {
+            $process = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
+            if ($process) {
+                "$($_.LocalAddress):$($_.LocalPort) owned by $($process.ProcessName) pid=$($_.OwningProcess)"
+            }
+            else {
+                "$($_.LocalAddress):$($_.LocalPort) owned by pid=$($_.OwningProcess)"
+            }
+        }
+
+        throw "Port $Port is already in use: $($processInfo -join '; ')"
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 Set-Content -Path (Join-Path $RepoDir ".env") -Value "IMAGE=$Image"
 
@@ -69,6 +106,7 @@ $targetPort = Get-SlotPort $targetSlot
 Write-Host "Active slot: $activeSlot"
 Write-Host "Deploying image $Image to $targetSlot on port $targetPort"
 
+Test-PortAvailable 80
 Write-NginxConfig $targetPort
 
 docker compose --env-file (Join-Path $RepoDir ".env") -f $ComposeFile --profile $targetSlot pull

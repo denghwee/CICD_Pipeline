@@ -96,11 +96,9 @@ Configure these secrets in the GitHub repository:
 
 - `SONAR_HOST_URL`
 - `SONAR_TOKEN`
-- `REGISTRY_USERNAME`
-- `REGISTRY_TOKEN`
 - `VM_APP_DIR`
 
-For GHCR, `REGISTRY_USERNAME` is usually your GitHub username and `REGISTRY_TOKEN` should be a token that can pull packages from the Windows runner. The workflow uses `GITHUB_TOKEN` to push images from GitHub Actions.
+The workflow uses `GITHUB_TOKEN` to push to and pull from GitHub Container Registry for this repository.
 
 ## Windows Runner Requirements
 
