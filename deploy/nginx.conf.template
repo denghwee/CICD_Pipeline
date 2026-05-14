@@ -1,5 +1,5 @@
 upstream fastapi_backend {
-    server 127.0.0.1:__ACTIVE_PORT__;
+    server host.docker.internal:__ACTIVE_PORT__;
 }
 
 server {

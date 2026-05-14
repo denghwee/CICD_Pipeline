@@ -1,6 +1,6 @@
 # FastAPI CI/CD Pipeline with Docker and SonarQube
 
-This project demonstrates a production-like CI/CD pipeline for a FastAPI application. It includes automated linting, testing, Docker image builds, SonarQube analysis with a mandatory quality gate, and Blue-Green deployment to a VM using Docker Compose and Nginx.
+This project demonstrates a production-like CI/CD pipeline for a FastAPI application. It includes automated linting, testing, Docker image builds, SonarQube analysis with a mandatory quality gate, and Blue-Green deployment on a Windows self-hosted GitHub Actions runner using Docker Compose and an Nginx container.
 
 ## Architecture
 
@@ -8,11 +8,11 @@ The deployment flow is:
 
 ```text
 Developer push
-  -> GitHub Actions lint/test/build
-  -> SonarQube scan and quality gate
+  -> GitHub Actions self-hosted runner on Windows
+  -> lint/test/build
+  -> SonarQube scan and quality gate at localhost
   -> Push Docker image to GHCR
-  -> SSH to VM
-  -> Deploy inactive Blue-Green slot
+  -> Deploy inactive Blue-Green slot locally with Docker Desktop
   -> Health check
   -> Switch Nginx traffic or rollback
 ```
@@ -79,7 +79,7 @@ The project is configured by `sonar-project.properties`.
 
 Required GitHub secrets:
 
-- `SONAR_HOST_URL`: SonarQube server URL, for example `http://sonarqube.example.com`
+- `SONAR_HOST_URL`: SonarQube server URL, for local Windows runner use `http://localhost:9000`
 - `SONAR_TOKEN`: SonarQube project or user token
 
 The GitHub Actions workflow runs:
@@ -98,31 +98,34 @@ Configure these secrets in the GitHub repository:
 - `SONAR_TOKEN`
 - `REGISTRY_USERNAME`
 - `REGISTRY_TOKEN`
-- `VM_HOST`
-- `VM_USER`
-- `VM_SSH_KEY`
 - `VM_APP_DIR`
 
-For GHCR, `REGISTRY_USERNAME` is usually your GitHub username and `REGISTRY_TOKEN` should be a token that can pull packages from the VM. The workflow uses `GITHUB_TOKEN` to push images from GitHub Actions.
+For GHCR, `REGISTRY_USERNAME` is usually your GitHub username and `REGISTRY_TOKEN` should be a token that can pull packages from the Windows runner. The workflow uses `GITHUB_TOKEN` to push images from GitHub Actions.
 
-## VM Requirements
+## Windows Runner Requirements
 
-The target VM should have:
+The Windows self-hosted runner machine should have:
 
-- Docker Engine
-- Docker Compose plugin
-- Nginx
-- curl
-- sudo permission for the deploy user, or write/reload permission for Nginx
+- GitHub Actions self-hosted runner registered to this repository
+- Python 3.11 or higher
+- Docker Desktop running with Linux containers
+- SonarQube running locally on port `9000`
 
-Example app directory:
+Example app directory in PowerShell:
 
-```bash
-sudo mkdir -p /opt/fastapi-cicd
-sudo chown "$USER":"$USER" /opt/fastapi-cicd
+```powershell
+New-Item -ItemType Directory -Force C:\fastapi-cicd
 ```
 
-Set `VM_APP_DIR=/opt/fastapi-cicd`.
+Set `VM_APP_DIR=C:\fastapi-cicd`.
+
+Run SonarQube locally with Docker Desktop:
+
+```powershell
+docker run -d --name sonarqube --restart unless-stopped -p 9000:9000 sonarqube:lts-community
+```
+
+Open `http://localhost:9000`, create project key `fastapi-cicd-demo`, and create a token for `SONAR_TOKEN`.
 
 ## Blue-Green Deployment
 
@@ -130,37 +133,35 @@ The deployment files are:
 
 - `deploy/docker-compose.blue-green.yml`
 - `deploy/nginx.conf.template`
-- `scripts/deploy-blue-green.sh`
-- `scripts/rollback.sh`
+- `scripts/deploy-blue-green.ps1`
+- `scripts/rollback.ps1`
 
 The deploy script chooses the inactive slot:
 
 - Blue runs on `127.0.0.1:8001`
 - Green runs on `127.0.0.1:8002`
-- Nginx listens on port `80` and proxies to the active slot
+- Nginx runs as a container on port `80` and proxies to the active slot through Docker Desktop
 
 Deployment behavior:
 
 1. Pull the new image.
 2. Start the inactive slot.
 3. Check `/health`.
-4. If healthy, rewrite the Nginx upstream and reload Nginx.
+4. If healthy, rewrite the generated Nginx config and reload the Nginx container.
 5. If unhealthy, stop the new slot and keep the old slot live.
 
-Manual deploy example on the VM:
+Manual deploy example on the Windows runner:
 
-```bash
-cd /opt/fastapi-cicd
-chmod +x scripts/deploy-blue-green.sh
-./scripts/deploy-blue-green.sh ghcr.io/OWNER/REPO:TAG
+```powershell
+$env:VM_APP_DIR = "C:\fastapi-cicd"
+.\scripts\deploy-blue-green.ps1 -Image "ghcr.io/OWNER/REPO:TAG"
 ```
 
 Manual rollback:
 
-```bash
-cd /opt/fastapi-cicd
-chmod +x scripts/rollback.sh
-./scripts/rollback.sh
+```powershell
+$env:VM_APP_DIR = "C:\fastapi-cicd"
+.\scripts\rollback.ps1
 ```
 
 ## Assignment Answers

@@ -10,4 +10,5 @@ htmlcov/
 .env
 .env.*
 !.env.example
+deploy/nginx.generated.conf
 .DS_Store

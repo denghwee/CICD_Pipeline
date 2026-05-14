@@ -10,19 +10,19 @@ It also improves security because the final container has a smaller attack surfa
 
 ## 2. Complete CI/CD pipeline flow
 
-When a developer pushes code to the `master` branch, GitHub Actions starts the CI/CD workflow.
+When a developer pushes code to the `master` branch, GitHub Actions starts the CI/CD workflow on the Windows self-hosted runner.
 
 First, the lint job runs `ruff check .` to catch style and static code issues. Then the test job installs dependencies and runs `pytest` with coverage enabled. The coverage result is saved as `coverage.xml`.
 
 After lint and tests pass, the Docker build job builds the FastAPI image from the multi-stage Dockerfile. The SonarQube job then sends the source code and coverage report to SonarQube. SonarQube analyzes bugs, vulnerabilities, code smells, maintainability, and test coverage.
 
-If the SonarQube quality gate passes, the pipeline pushes the Docker image to GitHub Container Registry. The deployment job then connects to the VM over SSH, copies deployment files, pulls the new image, and deploys it to the inactive Blue-Green slot.
+If the SonarQube quality gate passes, the pipeline pushes the Docker image to GitHub Container Registry. The deployment job then runs locally on the Windows runner, pulls the new image with Docker Desktop, and deploys it to the inactive Blue-Green slot.
 
-The inactive slot is health checked through `/health`. If the new version is healthy, Nginx switches traffic to the new slot and the old slot is stopped. If the health check fails, traffic remains on the old slot and the deployment fails.
+The inactive slot is health checked through `/health`. If the new version is healthy, the Nginx container reloads with the new upstream and switches traffic to the new slot. If the health check fails, traffic remains on the old slot and the deployment fails.
 
 ## 3. How the SonarQube quality gate integrates with the pipeline
 
-SonarQube is integrated through GitHub Actions using `SONAR_HOST_URL` and `SONAR_TOKEN`. The scanner reads `sonar-project.properties`, uploads the source code and `coverage.xml`, and waits for SonarQube analysis.
+SonarQube is integrated through GitHub Actions using `SONAR_HOST_URL` and `SONAR_TOKEN`. In this local deployment model, `SONAR_HOST_URL` is `http://localhost:9000` because the job runs on the Windows self-hosted runner where SonarQube is running. The scanner reads `sonar-project.properties`, uploads the source code and `coverage.xml`, and waits for SonarQube analysis.
 
 The quality gate action checks whether the project meets the configured rules, such as minimum coverage, no critical bugs, no critical vulnerabilities, and acceptable maintainability ratings.
 
