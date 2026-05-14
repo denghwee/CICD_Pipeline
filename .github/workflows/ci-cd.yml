@@ -93,17 +93,74 @@ jobs:
           path: .
 
       - name: SonarQube scan
-        uses: SonarSource/sonarqube-scan-action@v5
+        shell: powershell
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          $scannerHostUrl = $env:SONAR_HOST_URL `
+            -replace "localhost", "host.docker.internal" `
+            -replace "127.0.0.1", "host.docker.internal"
+
+          docker run --rm `
+            -e SONAR_HOST_URL="$scannerHostUrl" `
+            -e SONAR_TOKEN="$env:SONAR_TOKEN" `
+            -v "${PWD}:/usr/src" `
+            sonarsource/sonar-scanner-cli:latest
 
       - name: SonarQube quality gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        timeout-minutes: 5
+        shell: powershell
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          $reportTaskPath = ".scannerwork/report-task.txt"
+          if (-not (Test-Path $reportTaskPath)) {
+            throw "SonarQube report task file was not created: $reportTaskPath"
+          }
+
+          $task = @{}
+          Get-Content $reportTaskPath | ForEach-Object {
+            if ($_ -match "^(.*?)=(.*)$") {
+              $task[$matches[1]] = $matches[2]
+            }
+          }
+
+          $ceTaskUrl = $task["ceTaskUrl"] `
+            -replace "host.docker.internal", "localhost"
+
+          $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:SONAR_TOKEN`:"))
+          $headers = @{ Authorization = "Basic $auth" }
+
+          for ($attempt = 1; $attempt -le 30; $attempt++) {
+            $ceTask = Invoke-RestMethod -Uri $ceTaskUrl -Headers $headers
+            $status = $ceTask.task.status
+            Write-Host "SonarQube background task status: $status"
+
+            if ($status -eq "SUCCESS") {
+              break
+            }
+
+            if ($status -in @("FAILED", "CANCELED")) {
+              throw "SonarQube background task ended with status $status"
+            }
+
+            Start-Sleep -Seconds 5
+          }
+
+          if ($status -ne "SUCCESS") {
+            throw "Timed out waiting for SonarQube background task"
+          }
+
+          $analysisId = $ceTask.task.analysisId
+          $qualityGateUrl = "$env:SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId"
+          $qualityGate = Invoke-RestMethod -Uri $qualityGateUrl -Headers $headers
+          $gateStatus = $qualityGate.projectStatus.status
+          Write-Host "SonarQube quality gate status: $gateStatus"
+
+          if ($gateStatus -ne "OK") {
+            throw "SonarQube quality gate failed with status $gateStatus"
+          }
 
   push:
     name: Push Docker Image
